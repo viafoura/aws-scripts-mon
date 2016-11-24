@@ -35,6 +35,7 @@ Description of available options:
   --disk-inode-used   Reports allocated disk inode.
   --disk-inode-avail  Reports available disk inode.
   --fs-no-files       Reports number of open files on system.
+  --tcp-no-conn       Reports number of tcp connections
 
   --aggregated[=only]    Adds aggregated metrics for instance type, AMI id, and region.
                          If =only is specified, does not report individual instance metrics
@@ -123,6 +124,7 @@ my $report_inode_util;
 my $report_inode_used;
 my $report_inode_avail;
 my $report_fs_no_files;
+my $report_tcp_no_conn;
 my $mem_used_incl_cache_buff;
 my @mount_path;
 my $mem_units;
@@ -165,6 +167,7 @@ my $argv_size = @ARGV;
     'disk-inode-used' => \$report_inode_used,
     'disk-inode-avail' => \$report_inode_avail,
     'fs-no-files' => \$report_fs_no_files,
+    'tcp-no-conn' => \$report_tcp_no_conn,
     'auto-scaling:s' => \$auto_scaling,
     'aggregated:s' => \$aggregated,
     'memory-units:s' => \$mem_units,
@@ -342,7 +345,7 @@ if (!$report_disk_space && ($report_disk_util || $report_disk_used || $report_di
 # check that there is a need to monitor at least something
 if (!$report_mem_util && !$report_mem_used && !$report_mem_avail
   && !$report_swap_util && !$report_swap_used && !$report_disk_space
-  && !$report_fs_no_files)
+  && !$report_fs_no_files && !$report_tcp_no_conn)
 {
   exit_with_error("No metrics specified for collection and submission to CloudWatch.");
 }
@@ -619,13 +622,28 @@ if ($report_disk_space && ($report_inode_util || $report_inode_used || $report_i
 if ($report_fs_no_files)
 {
   my $file_nr = `/bin/cat /proc/sys/fs/file-nr`;
-  
+
   my @fields = split('\s+', $file_nr);
   my $files_open = $fields[0];
-  
+
   add_metric('FilesOpen', 'Count', $files_open);
 }
-  
+
+if ($report_tcp_no_conn)
+{
+  my @tcpstat = `/bin/cat /proc/net/sockstat*`;
+
+  my $tcp_count = 0;
+
+  foreach my $line (@tcpstat)
+  {
+    if ($line =~ /^TCP6?\: inuse (\d+)/) {
+      $tcp_count += $1;
+    }
+  }
+
+  add_metric('TCP Connections', 'Count', $tcp_count);
+}
 
 # send metrics over to CloudWatch if any
 
